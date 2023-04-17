@@ -27,6 +27,8 @@ from fastchat.serve.serve_chatglm import chatglm_generate_stream
 from fastchat.utils import (build_logger, server_error_msg,
     pretty_print_semaphore)
 
+from googletrans import Translator
+
 GB = 1 << 30
 
 worker_id = str(uuid.uuid4())[:6]
@@ -56,12 +58,11 @@ class ModelWorker:
         self.device = device
 
         logger.info(f"Loading the model {self.model_name} on worker {worker_id} ...")
-        self.model, self.tokenizer = load_model(
-            model_path, device, num_gpus, max_gpu_memory, load_8bit)
+        self.model, self.tokenizer = load_model(model_path, device, num_gpus, max_gpu_memory, load_8bit)
 
         if hasattr(self.model.config, "max_sequence_length"):
             self.context_len = self.model.config.max_sequence_length
-        elif hasattr(self.model.config, "max_position_embeddings"):
+        elif hasattr(self.model.config, "sition_embeddings"):
             self.context_len = self.model.config.max_position_embeddings
         else:
             self.context_len = 2048
@@ -126,14 +127,24 @@ class ModelWorker:
         }
 
     def generate_stream_gate(self, params):
+        translator=Translator()
         try:
             for output in self.generate_stream_func(self.model, self.tokenizer,
                     params, self.device, self.context_len, args.stream_interval):
-                ret = {
-                    "text": output,
-                    "error_code": 0,
-                }
-                yield json.dumps(ret).encode() + b"\0"
+                #print("HERE",output)
+                #translated_obj = translator.translate(text=output,dest=args.language)
+                #print(translated_obj.text)
+                #ret = {
+                #    "text": translated_obj.text,
+                #    #"text_en": output,
+                #    "error_code": 0,
+                #}
+                ret1 = {
+                        "text": output,
+                        "error_code": 0,
+                        }
+                yield json.dumps(ret1).encode() + b"\0"
+                #yield json.dumps(ret).encode() + json.dumps(ret1).encode() + b"\0"
         except torch.cuda.OutOfMemoryError:
             ret = {
                 "text": server_error_msg,
@@ -188,6 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("--limit-model-concurrency", type=int, default=5)
     parser.add_argument("--stream-interval", type=int, default=2)
     parser.add_argument("--no-register", action="store_true")
+    parser.add_argument("--language",type=str, default="ar")
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
